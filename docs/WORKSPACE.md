@@ -53,18 +53,18 @@
 
 ## Gradle Wrapper
 
-仓库使用 Gradle 9.2.1。Wrapper JAR 来源固定到 NeoForge 官方 1.21.1 ModDevGradle MDK 的特定提交。
+仓库使用标准 Gradle Wrapper，当前版本为 Gradle 9.2.1。
 
-正常仓库中应存在：
+`gradlew`、`gradlew.bat` 与 `gradle/wrapper/gradle-wrapper.jar` 均来自 NeoForge 官方 `MDK-1.21.1-ModDevGradle` 模板，初始化时固定参考提交：
 
-`gradle/wrapper/gradle-wrapper.jar`
+`30cafee9cd8d7f46427ec88fa8579d49c146df9a`
 
-`gradlew` 和 `gradlew.bat` 还保留了缺失时的安全回退下载逻辑，防止二进制文件意外丢失。
+Wrapper JAR 已正常纳入版本管理；CI 的 `gradle/actions/setup-gradle` 会同时执行 Wrapper 校验。
 
 ## 第三方依赖
 
 当前提交故意没有把 Epic Fight、Millénaire、技能树、滑铲和钩索模组直接锁进运行时。
 
-原因不是放弃这些方案，而是依赖版本、许可证、API 可用性必须先分别验证。未经兼容矩阵确认就把大型模组写进基础 Gradle 会把“工作区是否正确”与“第三方是否兼容”两个问题混在一起。
+原因不是放弃这些方案，而是依赖版本、许可证、API 可用性必须先分别验证。未经兼容矩阵确认就把大型模组写进基础 Gradle，会把“工作区是否正确”和“第三方是否兼容”两个问题混在一起。
 
 第三方接入将在单独阶段逐个落地。
