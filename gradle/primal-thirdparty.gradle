@@ -108,29 +108,26 @@ def managedHelperPatterns = [
         'xaeroworldmap-*.jar', 'xaeros-world-map-*.jar'
 ]
 
-tasks.register('syncClientHelperMods') {
+def clientModsDirectory = rootProject.layout.projectDirectory.dir('run/client/mods')
+def managedClientHelperFiles = rootProject.fileTree(clientModsDirectory) {
+    managedHelperPatterns.each { pattern -> include pattern }
+}
+
+// 使用标准 Delete / Copy 任务而不是 doLast 中直接访问 Project API。
+// 这样兼容 Gradle 9 configuration cache，同时不会删除 run/client/mods 中用户手工放入的其他测试模组。
+def cleanClientHelperMods = tasks.register('cleanClientHelperMods', Delete) {
+    group = 'primal setup'
+    description = '删除由 Primal 管理的客户端辅助模组旧版本，保留其他手工测试模组。'
+    delete(managedClientHelperFiles)
+}
+
+tasks.register('syncClientHelperMods', Copy) {
     group = 'primal setup'
     description = '下载并同步 Primal 客户端 QoL 模组到 run/client/mods，不加入 Primal 编译依赖。'
+    dependsOn(cleanClientHelperMods)
+    from(helperConfiguration)
+    into(clientModsDirectory)
     outputs.upToDateWhen { false }
-
-    doLast {
-        File targetDir = rootProject.file('run/client/mods')
-        targetDir.mkdirs()
-
-        def managedFiles = rootProject.fileTree(targetDir) {
-            managedHelperPatterns.each { pattern -> include pattern }
-        }.files
-        if (!managedFiles.isEmpty()) {
-            rootProject.delete(managedFiles)
-        }
-
-        rootProject.copy {
-            from(helperConfiguration)
-            into(targetDir)
-        }
-
-        logger.lifecycle("已同步 ${helperConfiguration.files.size()} 个客户端辅助 JAR 到 ${targetDir}")
-    }
 }
 
 tasks.register('verifyExternalMods') {
