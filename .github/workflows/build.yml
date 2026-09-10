@@ -37,5 +37,13 @@ jobs:
       - name: Validate project graph
         run: ./gradlew --no-daemon projects
 
+      - name: Resolve third-party mod matrix
+        run: ./gradlew --no-daemon verifyExternalMods
+
+      - name: Sync client helper mods
+        run: |
+          ./gradlew --no-daemon syncClientHelperMods
+          test "$(find run/client/mods -maxdepth 1 -type f -name '*.jar' | wc -l)" -eq 9
+
       - name: Build all modules
         run: ./gradlew --no-daemon buildAll

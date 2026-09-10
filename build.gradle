@@ -226,3 +226,7 @@ idea {
         downloadJavadoc = true
     }
 }
+
+// 第三方核心玩法模组、客户端 QoL 下载与源码工作区策略集中在单独脚本维护，
+// 避免根 build.gradle 随整合包增长变成依赖清单。
+apply from: rootProject.file('gradle/primal-thirdparty.gradle')

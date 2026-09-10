@@ -1,0 +1,160 @@
+// Primal 整合包第三方模组依赖清单。
+//
+// 原则：
+// 1. 核心玩法模组作为可复现的 Gradle 依赖进入统一 Dev Runtime；
+// 2. 只有真正需要调用 API 的 Primal 子模组获得 compileOnly 依赖；
+// 3. 纯客户端辅助模组不进入 Primal 编译/运行 classpath，而是由 syncClientHelperMods
+//    下载并复制到 run/client/mods；
+// 4. 所有第三方 JAR 均来自上游 Maven/CurseMaven/Modrinth，不提交到 Primal Git 历史。
+
+def primalProjects = rootProject.ext.primalModules.keySet().collect { project(it) }
+def allDevelopmentProjects = [rootProject] + primalProjects
+
+allDevelopmentProjects.each { Project p ->
+    p.repositories {
+        maven {
+            name = 'CurseMaven'
+            url = uri('https://www.cursemaven.com')
+        }
+        maven {
+            name = 'Modrinth'
+            url = uri('https://api.modrinth.com/maven')
+        }
+    }
+}
+
+// 决定 Primal 核心玩法的第三方基础设施。
+// 支持库（playerAnimator / YACL）也在此处显式锁定，避免依赖解析依赖上游元数据的偶然行为。
+def foundationMods = [
+        epicFight      : 'curse.maven:epic-fight-mod-405076:8175609',
+        puffishSkills  : 'curse.maven:puffish-skills-835091:8792775',
+        stealthAlert   : 'curse.maven:stealth-and-alert-1517152:8600227',
+        playerAnimator : 'maven.modrinth:gedNE4y2:HJZB6bmA',
+        slide          : 'curse.maven:slide-1519703:7969779',
+        grapplingHooks : 'curse.maven:yori3os-grappling-hooks-1376009:8538893',
+        yacl            : 'maven.modrinth:1eAoo2KR:QmZ6hqcE',
+        millenaire      : 'curse.maven:millenaire-270871:8772286'
+]
+
+// 纯客户端 QoL。这里只把 Maven 当作下载渠道；这些模组不会成为 Primal Java 模块的编译依赖。
+def clientHelperMods = [
+        jei                   : 'curse.maven:jei-238222:8792638',
+        jade                  : 'curse.maven:jade-324717:8591319',
+        justEnoughCharacters  : 'maven.modrinth:justenoughcharacters:TdUA8TeZ',
+        mouseTweaks           : 'curse.maven:mouse-tweaks-60089:5637846',
+        inventoryProfilesNext : 'curse.maven:inventory-profiles-next-495267:7810574',
+        libIPN                : 'curse.maven:libipn-679177:7810552',
+        kotlinForForge        : 'curse.maven:kotlin-for-forge-351264:8335665',
+        xaeroMinimap          : 'curse.maven:xaeros-minimap-263420:8449819',
+        xaeroWorldMap         : 'curse.maven:xaeros-world-map-317780:8449921'
+]
+
+rootProject.ext.foundationModCoordinates = foundationMods.asImmutable()
+rootProject.ext.clientHelperModCoordinates = clientHelperMods.asImmutable()
+
+def foundationConfiguration = rootProject.configurations.maybeCreate('primalFoundationMods')
+foundationConfiguration.canBeConsumed = false
+foundationConfiguration.canBeResolved = true
+foundationConfiguration.description = 'Primal 统一开发运行环境所需的第三方核心玩法模组。'
+
+def helperConfiguration = rootProject.configurations.maybeCreate('clientHelperMods')
+helperConfiguration.canBeConsumed = false
+helperConfiguration.canBeResolved = true
+helperConfiguration.description = '复制到 run/client/mods 的纯客户端辅助模组。'
+
+// 根 ModDevGradle 的 Dev Runtime 从 runtimeClasspath 启动。
+// 把 foundation 配置接入 runtimeOnly，使这些模组在 Client/Server Dev Run 中真实加载。
+rootProject.configurations.named('runtimeOnly').configure {
+    extendsFrom(foundationConfiguration)
+}
+
+def addNonTransitiveDependency = { Project p, String configurationName, String coordinate ->
+    def dependency = p.dependencies.create(coordinate) {
+        transitive = false
+    }
+    p.dependencies.add(configurationName, dependency)
+}
+
+foundationMods.values().each { coordinate ->
+    addNonTransitiveDependency(rootProject, 'primalFoundationMods', coordinate)
+}
+
+clientHelperMods.values().each { coordinate ->
+    addNonTransitiveDependency(rootProject, 'clientHelperMods', coordinate)
+}
+
+// 只向真正需要调用对应 API 的模块暴露编译期类。
+def addFoundationCompileOnly = { String projectPath, List<String> keys ->
+    Project target = project(projectPath)
+    keys.each { String key ->
+        addNonTransitiveDependency(target, 'compileOnly', foundationMods[key])
+    }
+}
+
+addFoundationCompileOnly(':mods:progression', ['puffishSkills'])
+addFoundationCompileOnly(':mods:actions', ['epicFight', 'stealthAlert', 'playerAnimator', 'slide', 'grapplingHooks', 'yacl'])
+addFoundationCompileOnly(':mods:settlement', ['millenaire'])
+
+// 只删除由本任务管理的辅助模组旧版本，保留用户以后手工放入 run/client/mods 的其他 JAR。
+def managedHelperPatterns = [
+        'jei-*.jar',
+        'jade-*.jar', 'Jade-*.jar',
+        'jecharacters-*.jar', 'justenoughcharacters-*.jar',
+        'MouseTweaks-*.jar', 'mouse-tweaks-*.jar',
+        'InventoryProfilesNext-*.jar', 'inventory-profiles-next-*.jar',
+        'libIPN-*.jar', 'libipn-*.jar',
+        'kotlinforforge-*.jar', 'kotlin-for-forge-*.jar',
+        'xaerominimap-*.jar', 'xaeros-minimap-*.jar',
+        'xaeroworldmap-*.jar', 'xaeros-world-map-*.jar'
+]
+
+def clientModsDirectory = rootProject.layout.projectDirectory.dir('run/client/mods')
+def managedClientHelperFiles = rootProject.fileTree(clientModsDirectory) {
+    managedHelperPatterns.each { pattern -> include pattern }
+}
+
+// 使用标准 Delete / Copy 任务而不是 doLast 中直接访问 Project API。
+// 这样兼容 Gradle 9 configuration cache，同时不会删除 run/client/mods 中用户手工放入的其他测试模组。
+def cleanClientHelperMods = tasks.register('cleanClientHelperMods', Delete) {
+    group = 'primal setup'
+    description = '删除由 Primal 管理的客户端辅助模组旧版本，保留其他手工测试模组。'
+    delete(managedClientHelperFiles)
+}
+
+tasks.register('syncClientHelperMods', Copy) {
+    group = 'primal setup'
+    description = '下载并同步 Primal 客户端 QoL 模组到 run/client/mods，不加入 Primal 编译依赖。'
+    dependsOn(cleanClientHelperMods)
+    from(helperConfiguration)
+    into(clientModsDirectory)
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('verifyExternalMods') {
+    group = 'verification'
+    description = '解析并校验全部核心玩法模组和客户端辅助模组坐标。'
+
+    doLast {
+        // Gradle 9 不再暴露旧式 Configuration.resolve()；访问 files 即触发解析。
+        def foundationFiles = foundationConfiguration.files.toList().sort { it.name }
+        def helperFiles = helperConfiguration.files.toList().sort { it.name }
+
+        if (foundationFiles.size() != foundationMods.size()) {
+            throw new GradleException("核心玩法模组解析数量异常：预期 ${foundationMods.size()}，实际 ${foundationFiles.size()}")
+        }
+        if (helperFiles.size() != clientHelperMods.size()) {
+            throw new GradleException("客户端辅助模组解析数量异常：预期 ${clientHelperMods.size()}，实际 ${helperFiles.size()}")
+        }
+
+        logger.lifecycle('Primal 第三方核心玩法模组：')
+        foundationFiles.each { logger.lifecycle("  - ${it.name}") }
+        logger.lifecycle('Primal 客户端辅助模组：')
+        helperFiles.each { logger.lifecycle("  - ${it.name}") }
+    }
+}
+
+// 只有客户端 Dev Run 需要把 QoL JAR 实体放进 run/client/mods；
+// Server/GameTest/Data 不携带这些纯客户端辅助模组。
+rootProject.neoForge.runs.named('client').configure {
+    taskBefore rootProject.tasks.named('syncClientHelperMods')
+}
