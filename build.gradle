@@ -30,6 +30,21 @@ repositories {
     mavenCentral()
 }
 
+// 所有统一 Dev Run 都会加载六个子项目的 SourceSet。
+// 在全新克隆或执行 clean 后，这些 SourceSet 的 build/classes 与 build/resources 目录可能尚不存在。
+// SecureJarHandler 会拒绝不存在的 Mod 路径，因此统一在启动前准备全部本地 Mod 输出。
+def preparePrimalModOutputs = tasks.register('preparePrimalModOutputs') {
+    group = 'ide'
+    description = '为统一 NeoForge Dev Runtime 编译并处理全部 Primal 本地模组输出。'
+    dependsOn(primalProjects.collect { "${it.path}:classes" })
+}
+
+// IDEA 生成的 Java/Gradle 运行配置会构建根 sourceSet 的 classes。
+// 让根 classes 同样依赖全部本地 Mod，可保证直接点击 IDEA 的运行按钮时输出目录已经存在。
+tasks.named('classes').configure {
+    dependsOn(preparePrimalModOutputs)
+}
+
 // settings.gradle 会为 mods:* 自动创建中间父项目 :mods。
 // 这里只配置真正产出 JAR 的六个叶子 Mod，避免把 :mods 误当成 NeoForge Mod。
 configure(primalProjects) {
@@ -165,6 +180,7 @@ neoForge {
         }
 
         configureEach {
+            taskBefore preparePrimalModOutputs
             systemProperty 'forge.logging.markers', 'REGISTRIES'
             logLevel = org.slf4j.event.Level.INFO
         }
