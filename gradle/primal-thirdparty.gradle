@@ -30,7 +30,8 @@ def foundationMods = [
         puffishSkills  : 'curse.maven:puffish-skills-835091:8792775',
         stealthAlert   : 'curse.maven:stealth-and-alert-1517152:8600227',
         playerAnimator : 'maven.modrinth:gedNE4y2:HJZB6bmA',
-        slide          : 'curse.maven:slide-1519703:7969779',
+        // Slide! 1.0.5+1.21.1 的锁定发布 JAR 只有 fabric.mod.json。
+        // Primal 不为单一滑铲功能引入 Fabric 兼容层；后续由 primal_actions 原生实现滑铲状态机。
         grapplingHooks : 'curse.maven:yori3os-grappling-hooks-1376009:8538893',
         yacl            : 'maven.modrinth:1eAoo2KR:QmZ6hqcE',
         millenaire      : 'curse.maven:millenaire-270871:8772286'
@@ -92,7 +93,7 @@ def addFoundationCompileOnly = { String projectPath, List<String> keys ->
 }
 
 addFoundationCompileOnly(':mods:progression', ['puffishSkills'])
-addFoundationCompileOnly(':mods:actions', ['epicFight', 'stealthAlert', 'playerAnimator', 'slide', 'grapplingHooks', 'yacl'])
+addFoundationCompileOnly(':mods:actions', ['epicFight', 'stealthAlert', 'playerAnimator', 'grapplingHooks', 'yacl'])
 addFoundationCompileOnly(':mods:settlement', ['millenaire'])
 
 // 只删除由本任务管理的辅助模组旧版本，保留用户以后手工放入 run/client/mods 的其他 JAR。
@@ -150,6 +151,88 @@ tasks.register('verifyExternalMods') {
         foundationFiles.each { logger.lifecycle("  - ${it.name}") }
         logger.lifecycle('Primal 客户端辅助模组：')
         helperFiles.each { logger.lifecycle("  - ${it.name}") }
+    }
+}
+
+// 极少数 NeoForge 支撑库不是普通 @Mod JAR，因此没有 mods TOML。
+// 这种情况必须按逻辑依赖 key 显式放行，并同时验证其 Manifest 身份，禁止“没有 metadata 就默认通过”。
+def loaderMetadataWhitelist = [
+        kotlinForForge: [
+                manifestAttribute: 'FMLModType',
+                manifestValue    : 'LIBRARY',
+                reason           : 'Kotlin for Forge 是 NeoForge Kotlin language loader library'
+        ]
+]
+
+tasks.register('verifyExternalModLoaders') {
+    group = 'verification'
+    description = '读取实际第三方 JAR 的 Loader metadata，拒绝 Fabric-only 或未显式批准的未知 JAR。'
+    dependsOn(tasks.named('verifyExternalMods'))
+
+    doLast {
+        def verifyGroup = { String groupName, Map<String, String> coordinates, Set<File> resolvedFiles ->
+            coordinates.each { String key, String coordinate ->
+                def parts = coordinate.split(':')
+                def expectedFileName = "${parts[1]}-${parts[2]}.jar"
+                def jarFile = resolvedFiles.find { it.name == expectedFileName }
+                if (jarFile == null) {
+                    throw new GradleException("${groupName} ${key} 未找到已解析 JAR：${expectedFileName}")
+                }
+
+                def zip = new java.util.zip.ZipFile(jarFile)
+                try {
+                    def detectedMetadata = []
+                    def hasNeoForgeMetadata = zip.getEntry('META-INF/neoforge.mods.toml') != null
+                    def hasForgeMetadata = zip.getEntry('META-INF/mods.toml') != null
+                    def hasFabricMetadata = zip.getEntry('fabric.mod.json') != null
+
+                    if (hasNeoForgeMetadata) detectedMetadata.add('META-INF/neoforge.mods.toml')
+                    if (hasForgeMetadata) detectedMetadata.add('META-INF/mods.toml')
+                    if (hasFabricMetadata) detectedMetadata.add('fabric.mod.json')
+
+                    if (hasFabricMetadata && !hasNeoForgeMetadata && !hasForgeMetadata) {
+                        throw new GradleException(
+                                "拒绝 Fabric-only 模组：${groupName} ${key} (${jarFile.name})；" +
+                                        "检测到 metadata=${detectedMetadata}，但不存在 NeoForge/Forge metadata。"
+                        )
+                    }
+
+                    if (!hasNeoForgeMetadata && !hasForgeMetadata) {
+                        def exception = loaderMetadataWhitelist[key]
+                        if (exception == null) {
+                            throw new GradleException(
+                                    "无法确认模组 Loader：${groupName} ${key} (${jarFile.name})；" +
+                                            "检测到 metadata=${detectedMetadata ?: ['none']}，且未配置显式白名单。"
+                            )
+                        }
+
+                        def manifestEntry = zip.getEntry('META-INF/MANIFEST.MF')
+                        if (manifestEntry == null) {
+                            throw new GradleException("Loader 白名单校验失败：${key} (${jarFile.name}) 缺少 META-INF/MANIFEST.MF")
+                        }
+                        def manifest = new java.util.jar.Manifest(zip.getInputStream(manifestEntry))
+                        def actualValue = manifest.mainAttributes.getValue(exception.manifestAttribute)
+                        if (actualValue != exception.manifestValue) {
+                            throw new GradleException(
+                                    "Loader 白名单校验失败：${key} (${jarFile.name}) 预期 " +
+                                            "${exception.manifestAttribute}=${exception.manifestValue}，实际=${actualValue}"
+                            )
+                        }
+                        detectedMetadata.add("MANIFEST ${exception.manifestAttribute}=${actualValue}")
+                        logger.lifecycle("  - ${key}: ${jarFile.name} -> ${detectedMetadata}（白名单：${exception.reason}）")
+                    } else {
+                        logger.lifecycle("  - ${key}: ${jarFile.name} -> ${detectedMetadata}")
+                    }
+                } finally {
+                    zip.close()
+                }
+            }
+        }
+
+        logger.lifecycle('校验 Primal 核心玩法模组 Loader metadata：')
+        verifyGroup('核心玩法模组', foundationMods, foundationConfiguration.files)
+        logger.lifecycle('校验 Primal 客户端辅助模组 Loader metadata：')
+        verifyGroup('客户端辅助模组', clientHelperMods, helperConfiguration.files)
     }
 }
 

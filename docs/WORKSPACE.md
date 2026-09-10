@@ -63,8 +63,10 @@ Wrapper JAR 已正常纳入版本管理；CI 的 `gradle/actions/setup-gradle` �
 
 ## 第三方依赖
 
-当前提交故意没有把 Epic Fight、Millénaire、技能树、滑铲和钩索模组直接锁进运行时。
+核心玩法依赖集中在 `gradle/primal-thirdparty.gradle`，并进入根项目统一 Dev Runtime。只有实际调用第三方 API 的 Primal 子模组获得对应 `compileOnly` 视图，避免依赖扩散。
 
-原因不是放弃这些方案，而是依赖版本、许可证、API 可用性必须先分别验证。未经兼容矩阵确认就把大型模组写进基础 Gradle，会把“工作区是否正确”和“第三方是否兼容”两个问题混在一起。
+当前核心 Runtime 包含 Epic Fight、Pufferfish's Skills、Stealth & Alert、playerAnimator、Yori3o's Grappling Hooks、YACL 和 Millénaire。Slide! 的锁定 JAR 经实物检查为 Fabric-only，已移除；Primal 不引入 Sinytra Connector / Forgified Fabric API，滑铲改由 `primal_actions` 后续原生实现。
 
-第三方接入将在单独阶段逐个落地。
+客户端 QoL 依赖由 `syncClientHelperMods` 同步到 `run/client/mods`，不进入 Primal Java 编译依赖，也不会出现在 Dedicated Server Dev Runtime。
+
+除了 `verifyExternalMods` 的坐标解析校验，还必须运行 `verifyExternalModLoaders`。该任务直接打开实际下载 JAR，检查 NeoForge/Forge/Fabric metadata，并拒绝 Fabric-only 或未显式白名单的未知 Loader JAR。
