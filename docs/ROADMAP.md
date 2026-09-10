@@ -16,10 +16,11 @@
 - [ ] Epic Fight 版本/API/许可证核对
 - [ ] Stealth & Alert 版本/API/许可证核对
 - [ ] 技能树框架最终选型
-- [ ] Slide 版本/API 核对
+- [x] Slide Loader 核对：锁定 JAR 为 Fabric-only，已移除，后续由 `primal_actions` 原生实现滑铲
 - [ ] Grappling Hook 版本/API 核对
 - [ ] Millénaire 9.x 版本/API/自定义文化能力核对
-- [ ] Dedicated Server 联合启动测试
+- [x] 第三方核心与客户端辅助 JAR Loader / Runtime 审计
+- [x] Dedicated Server 联合启动测试
 
 ## M2 Vertical Slice：荒野 -> 营救 -> 营地
 

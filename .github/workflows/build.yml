@@ -40,6 +40,9 @@ jobs:
       - name: Resolve third-party mod matrix
         run: ./gradlew --no-daemon verifyExternalMods
 
+      - name: Verify third-party mod loaders
+        run: ./gradlew --no-daemon verifyExternalModLoaders
+
       - name: Sync client helper mods
         run: |
           ./gradlew --no-daemon syncClientHelperMods

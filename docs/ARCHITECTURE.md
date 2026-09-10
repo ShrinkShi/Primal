@@ -44,11 +44,13 @@
 - Epic Fight：动画与战斗运行时
 - Stealth & Alert：感知、警觉、搜索、Last Known Position
 - Pufferfish/Puffish Skills：技能树框架（最终选型需验证）
-- Slide：滑铲物理
 - Grappling Hook：钩索物理
+- `primal_actions` 原生滑铲：负责 `SPRINT -> SLIDE -> SLIDE_ATTACK -> SLIDE_TAKEDOWN` 状态机、动量、碰撞箱、相机、体力与 Epic Fight 动画衔接
 - Millénaire：NPC 文明/村庄模拟基础
 
 原则上，第三方具体类型只允许出现在负责该领域的 Compat 层中。`primal_core` 不得 import Epic Fight、Millénaire 等第三方实现类型。
+
+Slide! 的 1.21.1 锁定发布 JAR 经实物审计为 Fabric-only，因此不再属于 Primal 第三方边界。项目不为该功能引入 Fabric 兼容层，滑铲由 `primal_actions` 自研 NeoForge 原生实现。
 
 ## 模块间通信
 

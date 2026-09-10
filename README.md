@@ -46,6 +46,7 @@ Primal 是一个面向 Minecraft 1.21.1 + NeoForge 的大型整合包 / 多 Mod 
 
 ```bash
 ./gradlew verifyExternalMods
+./gradlew verifyExternalModLoaders
 ./gradlew syncClientHelperMods
 ./gradlew buildAll
 ./gradlew runClient
@@ -65,14 +66,15 @@ Windows 使用对应的 `gradlew.bat`。
 - Pufferfish's Skills
 - Stealth & Alert
 - playerAnimator
-- Slide!
 - Yori3o's Grappling Hooks
 - YetAnotherConfigLib (YACL)
 - Millénaire
 
 其中 `primal_progression`、`primal_actions`、`primal_settlement` 只获得各自真正需要的编译期 API 视图，避免第三方依赖向其他 Primal 模块扩散。
 
-版本、文件 ID、前置关系和许可证注意事项见 `docs/DEPENDENCIES.md`。
+版本、文件 ID、Loader 审计结果、前置关系和许可证注意事项见 `docs/DEPENDENCIES.md`。
+
+Slide! 曾被作为滑铲依赖接入，但锁定的 1.21.1 发布 JAR 实际只有 `fabric.mod.json`，属于 Fabric-only。Primal 不为单一滑铲功能引入 Sinytra Connector / Forgified Fabric API，因此已从核心 Runtime 与 `primal_actions` 编译依赖中移除。后续滑铲由 `primal_actions` 原生实现，以便统一控制 `SPRINT -> SLIDE -> SLIDE_ATTACK -> SLIDE_TAKEDOWN`、动量、碰撞箱、相机、体力、天赋和 Epic Fight 动画。
 
 ## 第三方源码原则
 
