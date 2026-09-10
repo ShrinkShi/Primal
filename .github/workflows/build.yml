@@ -37,5 +37,8 @@ jobs:
       - name: Validate project graph
         run: ./gradlew --no-daemon projects
 
+      - name: Resolve third-party mod matrix
+        run: ./gradlew --no-daemon verifyExternalMods
+
       - name: Build all modules
         run: ./gradlew --no-daemon buildAll
