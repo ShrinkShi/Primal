@@ -18,6 +18,8 @@ def moduleDefinitions = [
 
 ext.primalModules = moduleDefinitions
 
+def primalProjects = moduleDefinitions.keySet().collect { project(it) }
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -28,11 +30,10 @@ repositories {
     mavenCentral()
 }
 
-subprojects {
+// settings.gradle 会为 mods:* 自动创建中间父项目 :mods。
+// 这里只配置真正产出 JAR 的六个叶子 Mod，避免把 :mods 误当成 NeoForge Mod。
+configure(primalProjects) {
     def module = rootProject.ext.primalModules[project.path]
-    if (module == null) {
-        throw new GradleException("未登记的 Primal 子项目: ${project.path}")
-    }
 
     apply plugin: 'java-library'
     apply plugin: 'idea'
@@ -179,20 +180,20 @@ neoForge {
 }
 
 tasks.named('build').configure {
-    dependsOn(subprojects.collect { "${it.path}:build" })
+    dependsOn(primalProjects.collect { "${it.path}:build" })
 }
 
 tasks.register('buildAll') {
     group = 'build'
     description = '构建 Primal 工作区的全部自研模组。'
-    dependsOn(subprojects.collect { "${it.path}:build" })
+    dependsOn(primalProjects.collect { "${it.path}:build" })
 }
 
 tasks.register('collectModJars', Copy) {
     group = 'build'
     description = '构建并收集全部 Primal 模组 JAR 到 build/mods。'
-    dependsOn(subprojects.collect { "${it.path}:jar" })
-    subprojects.each { p ->
+    dependsOn(primalProjects.collect { "${it.path}:jar" })
+    primalProjects.each { p ->
         from(p.tasks.named('jar').flatMap { it.archiveFile })
     }
     into(layout.buildDirectory.dir('mods'))
