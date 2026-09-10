@@ -33,7 +33,7 @@ repositories {
 // settings.gradle 会为 mods:* 自动创建中间父项目 :mods。
 // 这里只配置真正产出 JAR 的六个叶子 Mod，避免把 :mods 误当成 NeoForge Mod。
 configure(primalProjects) {
-    def module = rootProject.ext.primalModules[project.path]
+    def moduleDef = rootProject.ext.primalModules[project.path]
 
     apply plugin: 'java-library'
     apply plugin: 'idea'
@@ -54,7 +54,7 @@ configure(primalProjects) {
     }
 
     base {
-        archivesName = module.id
+        archivesName = moduleDef.id
     }
 
     sourceSets.main.resources {
@@ -74,7 +74,7 @@ configure(primalProjects) {
         validateAccessTransformers = true
 
         mods {
-            "${module.id}" {
+            "${moduleDef.id}" {
                 sourceSet(sourceSets.main)
             }
         }
@@ -86,10 +86,10 @@ configure(primalProjects) {
                 minecraft_version_range: rootProject.minecraft_version_range,
                 neo_version            : rootProject.neo_version,
                 loader_version_range   : rootProject.loader_version_range,
-                mod_id                 : module.id,
-                mod_name               : module.name,
+                mod_id                 : moduleDef.id,
+                mod_name               : moduleDef.name,
                 mod_version            : rootProject.primal_version,
-                mod_description        : module.description,
+                mod_description        : moduleDef.description,
                 internal_version_range : "[${rootProject.primal_version},)"
         ]
         inputs.properties(replaceProperties)
@@ -171,8 +171,8 @@ neoForge {
     }
 
     mods {
-        moduleDefinitions.each { projectPath, module ->
-            "${module.id}" {
+        moduleDefinitions.each { projectPath, moduleDef ->
+            "${moduleDef.id}" {
                 sourceSet(project(projectPath).sourceSets.main)
             }
         }
