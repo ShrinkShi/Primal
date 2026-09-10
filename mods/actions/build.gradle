@@ -1,0 +1,4 @@
+dependencies {
+    implementation project(':mods:core')
+    implementation project(':mods:progression')
+}

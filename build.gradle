@@ -1,0 +1,211 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.146'
+}
+
+group = primal_group
+version = primal_version
+
+def moduleDefinitions = [
+        ':mods:core'       : [id: 'primal_core',        name: 'Primal Core',        description: 'Primal 系列模组共享 API、事件、标识与基础数据协议。'],
+        ':mods:progression': [id: 'primal_progression', name: 'Primal Progression', description: '玩家等级、技能解锁与天赋框架适配层。'],
+        ':mods:actions'    : [id: 'primal_actions',     name: 'Primal Actions',     description: '动作、潜行处决与第三方战斗/移动模组兼容层。'],
+        ':mods:society'    : [id: 'primal_society',     name: 'Primal Society',     description: '部落、阵营、成员关系、职位、声望与外交规则。'],
+        ':mods:settlement' : [id: 'primal_settlement',  name: 'Primal Settlement',  description: '聚落、族人劳动力与村庄系统的整合层。'],
+        ':mods:warfare'    : [id: 'primal_warfare',     name: 'Primal Warfare',     description: '小队、RTS 指挥、士气、据点、区域控制与战争规则。']
+]
+
+ext.primalModules = moduleDefinitions
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+subprojects {
+    def module = rootProject.ext.primalModules[project.path]
+    if (module == null) {
+        throw new GradleException("未登记的 Primal 子项目: ${project.path}")
+    }
+
+    apply plugin: 'java-library'
+    apply plugin: 'idea'
+    apply plugin: 'net.neoforged.moddev'
+
+    group = rootProject.primal_group
+    version = rootProject.primal_version
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+        withSourcesJar()
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    base {
+        archivesName = module.id
+    }
+
+    sourceSets.main.resources {
+        srcDir('src/generated/resources')
+        exclude('**/*.bbmodel')
+        exclude('src/generated/**/.cache')
+    }
+
+    neoForge {
+        version = rootProject.neo_version
+
+        parchment {
+            mappingsVersion = rootProject.parchment_mappings_version
+            minecraftVersion = rootProject.parchment_minecraft_version
+        }
+
+        validateAccessTransformers = true
+
+        mods {
+            "${module.id}" {
+                sourceSet(sourceSets.main)
+            }
+        }
+    }
+
+    tasks.withType(ProcessResources).configureEach {
+        def replaceProperties = [
+                minecraft_version      : rootProject.minecraft_version,
+                minecraft_version_range: rootProject.minecraft_version_range,
+                neo_version            : rootProject.neo_version,
+                loader_version_range   : rootProject.loader_version_range,
+                mod_id                 : module.id,
+                mod_name               : module.name,
+                mod_version            : rootProject.primal_version,
+                mod_description        : module.description,
+                internal_version_range : "[${rootProject.primal_version},)"
+        ]
+        inputs.properties(replaceProperties)
+        filesMatching('META-INF/neoforge.mods.toml') {
+            expand(replaceProperties)
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 21
+    }
+
+    tasks.named('jar', Jar).configure {
+        manifest {
+            attributes(
+                    'Automatic-Module-Name': "io.github.shrinkshi.primal.${project.name.replace('-', '.')}"
+            )
+        }
+    }
+
+    idea {
+        module {
+            downloadSources = true
+            downloadJavadoc = true
+        }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    validateAccessTransformers = true
+
+    runs {
+        client {
+            client()
+            ideName = 'Primal - Client'
+            gameDirectory = file('run/client')
+            programArguments.addAll '--username', 'PrimalDev'
+            systemProperty 'neoforge.enabledGameTestNamespaces', moduleDefinitions.values()*.id.join(',')
+        }
+
+        server {
+            server()
+            ideName = 'Primal - Dedicated Server'
+            gameDirectory = file('run/server')
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', moduleDefinitions.values()*.id.join(',')
+        }
+
+        gameTestServer {
+            type = 'gameTestServer'
+            ideName = 'Primal - GameTest Server'
+            gameDirectory = file('run/gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', moduleDefinitions.values()*.id.join(',')
+        }
+
+        data {
+            data()
+            ideName = 'Primal - Data Generation'
+            gameDirectory = file('run/data')
+            programArguments.addAll(
+                    '--mod', moduleDefinitions.values()*.id.join(','),
+                    '--all',
+                    '--output', file('pack/generated').absolutePath
+            )
+        }
+
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
+
+    mods {
+        moduleDefinitions.each { projectPath, module ->
+            "${module.id}" {
+                sourceSet(project(projectPath).sourceSets.main)
+            }
+        }
+    }
+}
+
+tasks.named('build').configure {
+    dependsOn(subprojects.collect { "${it.path}:build" })
+}
+
+tasks.register('buildAll') {
+    group = 'build'
+    description = '构建 Primal 工作区的全部自研模组。'
+    dependsOn(subprojects.collect { "${it.path}:build" })
+}
+
+tasks.register('collectModJars', Copy) {
+    group = 'build'
+    description = '构建并收集全部 Primal 模组 JAR 到 build/mods。'
+    dependsOn(subprojects.collect { "${it.path}:jar" })
+    subprojects.each { p ->
+        from(p.tasks.named('jar').flatMap { it.archiveFile })
+    }
+    into(layout.buildDirectory.dir('mods'))
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
