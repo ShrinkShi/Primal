@@ -138,8 +138,9 @@ tasks.register('verifyExternalMods') {
     description = '解析并校验全部核心玩法模组和客户端辅助模组坐标。'
 
     doLast {
-        def foundationFiles = foundationConfiguration.resolve().sort { it.name }
-        def helperFiles = helperConfiguration.resolve().sort { it.name }
+        // Gradle 9 不再暴露旧式 Configuration.resolve()；访问 files 即触发解析。
+        def foundationFiles = foundationConfiguration.files.toList().sort { it.name }
+        def helperFiles = helperConfiguration.files.toList().sort { it.name }
 
         if (foundationFiles.size() != foundationMods.size()) {
             throw new GradleException("核心玩法模组解析数量异常：预期 ${foundationMods.size()}，实际 ${foundationFiles.size()}")
