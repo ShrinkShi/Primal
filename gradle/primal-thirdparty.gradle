@@ -154,3 +154,9 @@ tasks.register('verifyExternalMods') {
         helperFiles.each { logger.lifecycle("  - ${it.name}") }
     }
 }
+
+// 只有客户端 Dev Run 需要把 QoL JAR 实体放进 run/client/mods；
+// Server/GameTest/Data 不携带这些纯客户端辅助模组。
+rootProject.neoForge.runs.named('client').configure {
+    taskBefore rootProject.tasks.named('syncClientHelperMods')
+}
